@@ -31,6 +31,35 @@
 
   --font-display: 'DM Serif Display', Georgia, serif;
   --font-body: 'DM Sans', sans-serif;
+
+  --toggle-bg: #2a2722;
+  --toggle-knob: #c8a96e;
+}
+
+[data-theme="light"] {
+  --bg: #f5f2ec;
+  --bg-card: #ffffff;
+  --bg-elevated: #f0ece4;
+  --border: #e0dcd4;
+  --border-light: #d4cfc5;
+
+  --text: #1a1816;
+  --text-muted: #6b6358;
+  --text-dim: #9a9186;
+
+  --income-bg: #e6f4ec;
+  --income-border: #b8dfc8;
+
+  --outcome-bg: #f9e8e2;
+  --outcome-border: #e8b8a8;
+
+  --accent-dim: #a88d54;
+
+  --shadow: 0 4px 24px rgba(0,0,0,0.08);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.06);
+
+  --toggle-bg: #e0dcd4;
+  --toggle-knob: #c8a96e;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
