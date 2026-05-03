@@ -10,9 +10,10 @@ import {
   TrendingUp, TrendingDown, Wallet, ChevronLeft, ChevronRight,
   Filter, Trash2, Loader2, AlertCircle
 } from 'lucide-react';
-import type { PaymentMethod } from '../types';
+import type { PaymentMethod, People } from '../types';
 
 const METHODS: PaymentMethod[] = ['Pix', 'Credit', 'Debit'];
+const PEOPLE: People[] = ['Pedro', 'Clarissa'];
 
 export const HomePage: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -123,7 +124,6 @@ export const HomePage: React.FC = () => {
         />
       </div>
 
-      {/* Filters */}
       <div style={{
         background: 'var(--bg-card)',
         border: '1px solid var(--border)',
@@ -156,6 +156,15 @@ export const HomePage: React.FC = () => {
         </div>
 
         <div className="form-group" style={{ flex: '1 1 140px' }}>
+          <label className="form-label">Responsável</label>
+          <select className="form-select" value={filters.responsible ?? ''}
+            onChange={e => dispatch(setFilters({ ...filters, responsible: (e.target.value as People) || undefined }))}>
+            <option value="">Todos</option>
+            {PEOPLE.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+
+        <div className="form-group" style={{ flex: '1 1 140px' }}>
           <label className="form-label">De</label>
           <input className="form-input" type="date" value={filters.date_from ?? ''}
             onChange={e => dispatch(setFilters({ ...filters, date_from: e.target.value || undefined }))} />
@@ -181,6 +190,7 @@ export const HomePage: React.FC = () => {
               <tr>
                 <th>Data</th>
                 <th>Categoria</th>
+                <th>Responsável</th>
                 <th>Método</th>
                 <th>Observações</th>
                 <th style={{ textAlign: 'right' }}>Valor</th>
@@ -190,7 +200,7 @@ export const HomePage: React.FC = () => {
             <tbody>
               {loading ? (
                 <tr className="loading-row">
-                  <td colSpan={6}>
+                  <td colSpan={7}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'var(--text-muted)' }}>
                       <Loader2 size={18} className="spin" /> Carregando...
                     </div>
@@ -198,7 +208,7 @@ export const HomePage: React.FC = () => {
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={7}>
                     <div className="empty-state">
                       <AlertCircle size={36} />
                       <p>Nenhum registro encontrado para este período</p>
@@ -220,6 +230,9 @@ export const HomePage: React.FC = () => {
                         }} />
                         {record.categories?.name ?? '—'}
                       </div>
+                    </td>
+                    <td style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                      {record.responsible ?? '—'}
                     </td>
                     <td>
                       <span className={`badge badge-${record.method.toLowerCase()}`}>
