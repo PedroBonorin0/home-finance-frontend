@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../hooks/redux';
-import { fetchRecords, createRecord, updateRecord, deleteRecord, fetchSummary } from '../store/slices/recordsSlice';
+import { fetchRecords, createRecord, updateRecord, deleteRecord, deleteRecordByInstallmentGroup, updateRecordByInstallmentGroup, fetchSummary, fetchInstallmentGroups } from '../store/slices/recordsSlice';
 import { fetchCategories } from '../store/slices/categoriesSlice';
 import { formatCurrency, formatDate, methodLabel } from '../utils/formatters';
 import { useToast } from '../components/ui/Toast';
-import { Plus, Pencil, Trash2, X, Loader2, AlertCircle } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Loader2, AlertCircle, RotateCcw } from 'lucide-react';
 import type { CreateRecordDto, PaymentMethod, Record } from '../types';
 
 const METHODS: PaymentMethod[] = ['Pix', 'Credit', 'Debit'];
@@ -16,11 +16,12 @@ const emptyForm = (): CreateRecordDto => ({
   method: 'Pix',
   date: new Date().toISOString().split('T')[0],
   notes: '',
+  installments: undefined,
 });
 
 export const RecordsPage: React.FC = () => {
   const dispatch = useAppDispatch();
-  const { items, loading } = useAppSelector(s => s.records);
+  const { items, loading, installmentGroups } = useAppSelector(s => s.records);
   const { items: categories } = useAppSelector(s => s.categories);
   const { show } = useToast();
 
@@ -32,6 +33,7 @@ export const RecordsPage: React.FC = () => {
   useEffect(() => {
     dispatch(fetchCategories());
     dispatch(fetchRecords());
+    dispatch(fetchInstallmentGroups());
   }, [dispatch]);
 
   const openNew = () => {
@@ -49,6 +51,7 @@ export const RecordsPage: React.FC = () => {
       method: r.method,
       date: r.date,
       notes: r.notes ?? '',
+      installments: undefined,
     });
     setModalOpen(true);
   };
@@ -58,12 +61,28 @@ export const RecordsPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.category_id) return show('Selecione uma categoria', 'error');
-    if (!form.value || form.value <= 0) return show('Informe um valor válido', 'error');
+    if (!form.value || form.value <= 0) return show('Informe um valor valido', 'error');
     setSaving(true);
     try {
       if (editing) {
-        await dispatch(updateRecord({ id: editing.id, dto: form })).unwrap();
-        show('Registro atualizado', 'success');
+        if (editing.installment_group_id) {
+          const group = installmentGroups.find(g => g.id === editing.installment_group_id);
+          const total = group?.installments ?? '?';
+          const current = editing.installment_number ?? '?';
+          const editAll = confirm(`Esta e a parcela ${current}/${total}. Deseja editar TODAS as parcelas?`);
+          if (editAll) {
+            await dispatch(updateRecordByInstallmentGroup({
+              installmentGroupId: editing.installment_group_id,
+              dto: { category_id: form.category_id, value: form.value, notes: form.notes },
+            })).unwrap();
+            show('Parcelas atualizadas', 'success');
+          } else {
+            return;
+          }
+        } else {
+          await dispatch(updateRecord({ id: editing.id, dto: form })).unwrap();
+          show('Registro atualizado', 'success');
+        }
       } else {
         await dispatch(createRecord(form)).unwrap();
         dispatch(fetchSummary());
@@ -77,14 +96,28 @@ export const RecordsPage: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Remover este registro?')) return;
-    try {
-      await dispatch(deleteRecord(id)).unwrap();
-      dispatch(fetchSummary());
-      show('Registro removido', 'success');
-    } catch {
-      show('Erro ao remover', 'error');
+  const handleDelete = async (record: Record) => {
+    if (record.installment_group_id && record.installment_number) {
+      const group = installmentGroups.find(g => g.id === record.installment_group_id);
+      const total = group?.installments ?? '?';
+      const deleteAll = confirm(`Esta e a parcela ${record.installment_number}/${total}. Deseja excluir TODAS as parcelas?`);
+      if (!deleteAll) return;
+      try {
+        await dispatch(deleteRecordByInstallmentGroup(record.installment_group_id)).unwrap();
+        dispatch(fetchSummary());
+        show('Parcelas removidas', 'success');
+      } catch {
+        show('Erro ao remover parcelas', 'error');
+      }
+    } else {
+      if (!confirm('Remover este registro?')) return;
+      try {
+        await dispatch(deleteRecord(record.id)).unwrap();
+        dispatch(fetchSummary());
+        show('Registro removido', 'success');
+      } catch {
+        show('Erro ao remover', 'error');
+      }
     }
   };
 
@@ -119,6 +152,7 @@ export const RecordsPage: React.FC = () => {
                 <th>Tipo</th>
                 <th>Método</th>
                 <th>Observações</th>
+                <th>Parcelas</th>
                 <th style={{ textAlign: 'right' }}>Valor</th>
                 <th style={{ width: 88 }}></th>
               </tr>
@@ -126,7 +160,7 @@ export const RecordsPage: React.FC = () => {
             <tbody>
               {loading ? (
                 <tr className="loading-row">
-                  <td colSpan={7}>
+                  <td colSpan={8}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'var(--text-muted)' }}>
                       <Loader2 size={18} className="spin" /> Carregando...
                     </div>
@@ -134,7 +168,7 @@ export const RecordsPage: React.FC = () => {
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={8}>
                     <div className="empty-state">
                       <AlertCircle size={36} />
                       <p>Nenhum registro cadastrado ainda</p>
@@ -168,6 +202,19 @@ export const RecordsPage: React.FC = () => {
                         {r.notes || '—'}
                       </span>
                     </td>
+                    <td>
+                      {r.installment_group_id && r.installment_number ? (() => {
+                        const group = installmentGroups.find(g => g.id === r.installment_group_id);
+                        const total = group?.installments ?? '?';
+                        return (
+                          <span className="badge badge-credit" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem' }}>
+                            {r.installment_number}/{total}
+                          </span>
+                        );
+                      })() : (
+                        <span style={{ color: 'var(--text-dim)', fontSize: '0.8125rem' }}>—</span>
+                      )}
+                    </td>
                     <td style={{
                       textAlign: 'right', fontWeight: 600,
                       color: isIncome ? 'var(--income)' : 'var(--outcome)',
@@ -180,7 +227,7 @@ export const RecordsPage: React.FC = () => {
                         <button className="btn-icon" onClick={() => openEdit(r)} title="Editar">
                           <Pencil size={14} />
                         </button>
-                        <button className="btn-icon" onClick={() => handleDelete(r.id)} title="Remover"
+                        <button className="btn-icon" onClick={() => handleDelete(r)} title="Remover"
                           style={{ color: 'var(--outcome)' }}>
                           <Trash2 size={14} />
                         </button>
@@ -244,10 +291,23 @@ export const RecordsPage: React.FC = () => {
                   <div className="form-group">
                     <label className="form-label">Método *</label>
                     <select className="form-select" value={form.method}
-                      onChange={e => set('method', e.target.value as PaymentMethod)}>
+                      onChange={e => { set('method', e.target.value as PaymentMethod); if (e.target.value !== 'Credit') set('installments', undefined); }}>
                       {METHODS.map(m => <option key={m} value={m}>{methodLabel[m]}</option>)}
                     </select>
                   </div>
+
+                  {!editing && form.method === 'Credit' && (
+                    <div className="form-group">
+                      <label className="form-label">Parcelas</label>
+                      <select className="form-select" value={form.installments ?? 1}
+                        onChange={e => set('installments', parseInt(e.target.value) || undefined)}>
+                        <option value={1}>A vista</option>
+                        {Array.from({ length: 23 }, (_, i) => i + 2).map(n => (
+                          <option key={n} value={n}>{n}x</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                     <label className="form-label">Data *</label>

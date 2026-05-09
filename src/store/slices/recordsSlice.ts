@@ -1,6 +1,6 @@
 import { createAsyncThunk, createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { recordsApi } from '../../services/api';
-import type { CreateRecordDto, Record, RecordFilters, Summary } from '../../types';
+import { recordsApi, installmentGroupsApi } from '../../services/api';
+import type { CreateRecordDto, Record, RecordFilters, Summary, InstallmentGroup } from '../../types';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 
 const now = new Date();
@@ -12,6 +12,8 @@ interface RecordsState {
   loading: boolean;
   summaryLoading: boolean;
   error: string | null;
+  installmentGroups: InstallmentGroup[];
+  installmentGroupsLoading: boolean;
 }
 
 const initialState: RecordsState = {
@@ -24,6 +26,8 @@ const initialState: RecordsState = {
   loading: false,
   summaryLoading: false,
   error: null,
+  installmentGroups: [],
+  installmentGroupsLoading: false,
 };
 
 export const fetchRecords = createAsyncThunk(
@@ -56,6 +60,22 @@ export const updateRecord = createAsyncThunk(
 export const deleteRecord = createAsyncThunk(
   'records/delete',
   (id: string) => recordsApi.remove(id).then(() => id)
+);
+
+export const deleteRecordByInstallmentGroup = createAsyncThunk(
+  'records/deleteByInstallmentGroup',
+  (installmentGroupId: string) => recordsApi.removeByInstallmentGroup(installmentGroupId).then(() => installmentGroupId)
+);
+
+export const updateRecordByInstallmentGroup = createAsyncThunk(
+  'records/updateByInstallmentGroup',
+  ({ installmentGroupId, dto }: { installmentGroupId: string; dto: Partial<CreateRecordDto> }) =>
+    recordsApi.updateByInstallmentGroup(installmentGroupId, dto)
+);
+
+export const fetchInstallmentGroups = createAsyncThunk(
+  'records/fetchInstallmentGroups',
+  () => installmentGroupsApi.getAll()
 );
 
 const slice = createSlice({
@@ -92,7 +112,25 @@ const slice = createSlice({
 
       .addCase(deleteRecord.fulfilled, (s, a) => {
         s.items = s.items.filter(r => r.id !== a.payload);
-      });
+      })
+
+      .addCase(deleteRecordByInstallmentGroup.fulfilled, (s, a) => {
+        s.items = s.items.filter(r => r.installment_group_id !== a.payload);
+      })
+
+      .addCase(updateRecordByInstallmentGroup.fulfilled, (s, a) => {
+        const updatedIds = new Set(a.payload.map(r => r.id));
+        s.items = s.items.map(r => {
+          if (updatedIds.has(r.id)) {
+            return a.payload.find(ur => ur.id === r.id) || r;
+          }
+          return r;
+        });
+      })
+
+      .addCase(fetchInstallmentGroups.pending, s => { s.installmentGroupsLoading = true; })
+      .addCase(fetchInstallmentGroups.fulfilled, (s, a) => { s.installmentGroupsLoading = false; s.installmentGroups = a.payload; })
+      .addCase(fetchInstallmentGroups.rejected, s => { s.installmentGroupsLoading = false; });
   },
 });
 

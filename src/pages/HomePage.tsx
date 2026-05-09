@@ -1,14 +1,15 @@
 import React, { useEffect, useCallback } from 'react';
 import { useAppDispatch, useAppSelector } from '../hooks/redux';
-import { fetchRecords, fetchSummary, setFilters, clearFilters, deleteRecord } from '../store/slices/recordsSlice';
+import { fetchRecords, fetchSummary, setFilters, clearFilters, deleteRecord, deleteRecordByInstallmentGroup, fetchInstallmentGroups } from '../store/slices/recordsSlice';
 import { fetchCategories } from '../store/slices/categoriesSlice';
+import { fetchConfig } from '../store/slices/configSlice';
 import { formatCurrency, formatDate, methodLabel } from '../utils/formatters';
 import { useToast } from '../components/ui/Toast';
 import { format, startOfMonth, endOfMonth, subMonths, addMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   TrendingUp, TrendingDown, Wallet, ChevronLeft, ChevronRight,
-  Filter, Trash2, Loader2, AlertCircle
+  Filter, Trash2, Loader2, AlertCircle, RotateCcw, ArrowRightLeft
 } from 'lucide-react';
 import type { PaymentMethod, People } from '../types';
 
@@ -17,8 +18,9 @@ const PEOPLE: People[] = ['Pedro', 'Clarissa'];
 
 export const HomePage: React.FC = () => {
   const dispatch = useAppDispatch();
-  const { items, summary, filters, loading, summaryLoading } = useAppSelector(s => s.records);
+  const { items, summary, filters, loading, summaryLoading, installmentGroups } = useAppSelector(s => s.records);
   const { items: categories } = useAppSelector(s => s.categories);
+  const { config } = useAppSelector(s => s.config);
   const { show } = useToast();
 
   // Derive the current reference month from filters
@@ -31,6 +33,8 @@ export const HomePage: React.FC = () => {
 
   useEffect(() => {
     dispatch(fetchCategories());
+    dispatch(fetchInstallmentGroups());
+    dispatch(fetchConfig());
   }, [dispatch]);
 
   useEffect(() => {
@@ -46,18 +50,46 @@ export const HomePage: React.FC = () => {
     }));
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Remover este registro?')) return;
-    try {
-      await dispatch(deleteRecord(id)).unwrap();
-      dispatch(fetchSummary());
-      show('Registro removido', 'success');
-    } catch {
-      show('Erro ao remover registro', 'error');
+  const handleDelete = async (record: any) => {
+    if (record.installment_group_id && record.installment_number) {
+      const group = installmentGroups.find(g => g.id === record.installment_group_id);
+      const total = group?.installments ?? '?';
+      const deleteAll = confirm(`Esta e a parcela ${record.installment_number}/${total}. Deseja excluir TODAS as parcelas?`);
+      if (!deleteAll) return;
+      try {
+        await dispatch(deleteRecordByInstallmentGroup(record.installment_group_id)).unwrap();
+        dispatch(fetchSummary());
+        show('Parcelas removidas', 'success');
+      } catch {
+        show('Erro ao remover parcelas', 'error');
+      }
+    } else {
+      if (!confirm('Remover este registro?')) return;
+      try {
+        await dispatch(deleteRecord(record.id)).unwrap();
+        dispatch(fetchSummary());
+        show('Registro removido', 'success');
+      } catch {
+        show('Erro ao remover registro', 'error');
+      }
     }
   };
 
   const monthLabel = refDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+
+  // Transfer calculation
+  const pedroPct = config?.pedro_percentage ?? 50;
+  const clarissaPct = config?.clarissa_percentage ?? 50;
+  const outcomeRecords = items.filter(r => r.categories?.type === 'outcome');
+  const pedroPaid = outcomeRecords.filter(r => r.responsible === 'Pedro').reduce((s, r) => s + r.value, 0);
+  const clarissaPaid = outcomeRecords.filter(r => r.responsible === 'Clarissa').reduce((s, r) => s + r.value, 0);
+  const totalOutcome = summary?.total_outcome ?? 0;
+  const pedroShouldPay = totalOutcome * pedroPct / 100;
+  const clarissaShouldPay = totalOutcome * clarissaPct / 100;
+  const pedroDiff = pedroShouldPay - pedroPaid;
+  const transferAmount = Math.abs(pedroDiff);
+  const transferFrom = pedroDiff < 0 ? 'Clarissa' : 'Pedro';
+  const transferTo = pedroDiff < 0 ? 'Pedro' : 'Clarissa';
 
   return (
     <div style={{ padding: '32px 36px', maxWidth: 1100, margin: '0 auto' }}>
@@ -124,6 +156,71 @@ export const HomePage: React.FC = () => {
         />
       </div>
 
+      {/* Transfer calculation */}
+      {summary && totalOutcome > 0 && (
+        <div className="card" style={{ marginBottom: 20, padding: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+            <ArrowRightLeft size={16} style={{ color: 'var(--accent)' }} />
+            <span style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: '1rem',
+              color: 'var(--text)',
+            }}>
+              Acerto do Mês
+            </span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 4 }}>Total de Despesas</div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.25rem', color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>
+                {formatCurrency(totalOutcome)}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 4 }}>
+                Pedro <span style={{ color: 'var(--accent)', fontWeight: 600 }}>({pedroPct}%)</span>
+              </div>
+              <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: 2 }}>
+                Deve pagar: <span style={{ color: 'var(--text)', fontWeight: 600 }}>{formatCurrency(pedroShouldPay)}</span>
+              </div>
+              <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                Pagou: <span style={{ color: 'var(--outcome)', fontWeight: 600 }}>{formatCurrency(pedroPaid)}</span>
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 4 }}>
+                Clarissa <span style={{ color: 'var(--income)', fontWeight: 600 }}>({clarissaPct}%)</span>
+              </div>
+              <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: 2 }}>
+                Deve pagar: <span style={{ color: 'var(--text)', fontWeight: 600 }}>{formatCurrency(clarissaShouldPay)}</span>
+              </div>
+              <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+                Pagou: <span style={{ color: 'var(--outcome)', fontWeight: 600 }}>{formatCurrency(clarissaPaid)}</span>
+              </div>
+            </div>
+          </div>
+          {transferAmount > 0 && (
+            <div style={{
+              background: 'var(--bg-elevated)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '14px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              fontSize: '0.9375rem',
+            }}>
+              <ArrowRightLeft size={16} style={{ color: 'var(--accent)' }} />
+              <span style={{ color: 'var(--text-muted)' }}>
+                <strong style={{ color: 'var(--text)' }}>{transferFrom}</strong> deve transferir{' '}
+                <strong style={{ color: 'var(--accent)' }}>{formatCurrency(transferAmount)}</strong> para{' '}
+                <strong style={{ color: 'var(--text)' }}>{transferTo}</strong>
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       <div style={{
         background: 'var(--bg-card)',
         border: '1px solid var(--border)',
@@ -156,11 +253,24 @@ export const HomePage: React.FC = () => {
         </div>
 
         <div className="form-group" style={{ flex: '1 1 140px' }}>
-          <label className="form-label">Responsável</label>
+          <label className="form-label">Responsavel</label>
           <select className="form-select" value={filters.responsible ?? ''}
             onChange={e => dispatch(setFilters({ ...filters, responsible: (e.target.value as People) || undefined }))}>
             <option value="">Todos</option>
             {PEOPLE.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+
+        <div className="form-group" style={{ flex: '1 1 160px' }}>
+          <label className="form-label">Parcelas</label>
+          <select className="form-select" value={filters.installment_group_id ?? ''}
+            onChange={e => dispatch(setFilters({ ...filters, installment_group_id: e.target.value || undefined }))}>
+            <option value="">Todas</option>
+            {installmentGroups.map(ig => (
+              <option key={ig.id} value={ig.id}>
+                {ig.installments}x {formatCurrency(ig.installment_value)} - {ig.description ?? 'Sem descricao'}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -193,6 +303,7 @@ export const HomePage: React.FC = () => {
                 <th>Responsável</th>
                 <th>Método</th>
                 <th>Observações</th>
+                <th>Parcelas</th>
                 <th style={{ textAlign: 'right' }}>Valor</th>
                 <th style={{ width: 48 }}></th>
               </tr>
@@ -200,7 +311,7 @@ export const HomePage: React.FC = () => {
             <tbody>
               {loading ? (
                 <tr className="loading-row">
-                  <td colSpan={7}>
+                  <td colSpan={8}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'var(--text-muted)' }}>
                       <Loader2 size={18} className="spin" /> Carregando...
                     </div>
@@ -208,7 +319,7 @@ export const HomePage: React.FC = () => {
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={8}>
                     <div className="empty-state">
                       <AlertCircle size={36} />
                       <p>Nenhum registro encontrado para este período</p>
@@ -244,6 +355,19 @@ export const HomePage: React.FC = () => {
                         {record.notes ?? '—'}
                       </span>
                     </td>
+                    <td>
+                      {record.installment_group_id && record.installment_number ? (() => {
+                        const group = installmentGroups.find(g => g.id === record.installment_group_id);
+                        const total = group?.installments ?? '?';
+                        return (
+                          <span className="badge badge-credit" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem' }}>
+                            {record.installment_number}/{total}
+                          </span>
+                        );
+                      })() : (
+                        <span style={{ color: 'var(--text-dim)', fontSize: '0.8125rem' }}>—</span>
+                      )}
+                    </td>
                     <td style={{ textAlign: 'right', fontWeight: 600, fontSize: '0.9375rem',
                       color: isIncome ? 'var(--income)' : 'var(--outcome)',
                       fontVariantNumeric: 'tabular-nums',
@@ -252,7 +376,7 @@ export const HomePage: React.FC = () => {
                     </td>
                     <td>
                       <button className="btn-icon" style={{ borderColor: 'transparent' }}
-                        onClick={() => handleDelete(record.id)} title="Remover">
+                        onClick={() => handleDelete(record)} title="Remover">
                         <Trash2 size={15} style={{ color: 'var(--text-dim)' }} />
                       </button>
                     </td>

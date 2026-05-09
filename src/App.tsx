@@ -8,6 +8,7 @@ import { Layout } from './components/layout/Layout';
 import { HomePage } from './pages/HomePage';
 import { RecordsPage } from './pages/RecordsPage';
 import { CategoriesPage } from './pages/CategoriesPage';
+import { ConfigPage } from './pages/ConfigPage';
 
 export const App: React.FC = () => (
   <Provider store={store}>
@@ -19,6 +20,7 @@ export const App: React.FC = () => (
               <Route index element={<HomePage />} />
               <Route path="registros" element={<RecordsPage />} />
               <Route path="categorias" element={<CategoriesPage />} />
+              <Route path="config" element={<ConfigPage />} />
             </Route>
           </Routes>
         </BrowserRouter>

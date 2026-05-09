@@ -1,12 +1,13 @@
 import React from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { LayoutDashboard, Tag, ScrollText, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, Tag, ScrollText, Settings, Sun, Moon } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 
 const navItems = [
   { to: '/', label: 'Início', icon: LayoutDashboard, end: true },
   { to: '/registros', label: 'Registros', icon: ScrollText },
   { to: '/categorias', label: 'Categorias', icon: Tag },
+  { to: '/config', label: 'Configuração', icon: Settings },
 ];
 
 export const Layout: React.FC = () => {

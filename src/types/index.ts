@@ -18,9 +18,24 @@ export interface Record {
   method: PaymentMethod;
   date: string;
   notes?: string;
+  installment_group_id?: string;
+  installment_number?: number;
   created_at: string;
   updated_at: string;
   categories?: Category;
+}
+
+export interface InstallmentGroup {
+  id: string;
+  category_id: string;
+  responsible: People;
+  total_value: number;
+  installment_value: number;
+  installments: number;
+  first_date: string;
+  description?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface RecordFilters {
@@ -29,6 +44,7 @@ export interface RecordFilters {
   responsible?: People;
   date_from?: string;
   date_to?: string;
+  installment_group_id?: string;
 }
 
 export interface Summary {
@@ -43,6 +59,11 @@ export interface CreateCategoryDto {
   type: CategoryType;
 }
 
+export interface SplitConfig {
+  pedro_percentage: number;
+  clarissa_percentage: number;
+}
+
 export interface CreateRecordDto {
   category_id: string;
   responsible: People;
@@ -50,4 +71,5 @@ export interface CreateRecordDto {
   method: PaymentMethod;
   date: string;
   notes?: string;
+  installments?: number;
 }

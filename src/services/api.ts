@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Category, Record, RecordFilters, Summary, CreateCategoryDto, CreateRecordDto } from '../types';
+import type { Category, InstallmentGroup, Record, RecordFilters, Summary, CreateCategoryDto, CreateRecordDto, SplitConfig } from '../types';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api',
@@ -44,4 +44,37 @@ export const recordsApi = {
 
   remove: (id: string) =>
     api.delete(`/records/${id}`).then(r => r.data),
+
+  removeByInstallmentGroup: (installmentGroupId: string) =>
+    api.delete(`/records/installment-group/${installmentGroupId}`).then(r => r.data),
+
+  updateByInstallmentGroup: (installmentGroupId: string, dto: Partial<CreateRecordDto>) =>
+    api.patch<Record[]>(`/records/installment-group/${installmentGroupId}`, dto).then(r => r.data),
+
+  findByInstallmentGroup: (installmentGroupId: string) =>
+    api.get<Record[]>(`/records/installment-group/${installmentGroupId}`).then(r => r.data),
+};
+
+// ── Config ──────────────────────────────────────────────────────────────────
+
+export const configApi = {
+  get: () =>
+    api.get<SplitConfig>('/config').then(r => r.data),
+
+  update: (config: SplitConfig) =>
+    api.put<SplitConfig>('/config', config).then(r => r.data),
+};
+
+export const installmentGroupsApi = {
+  getAll: () =>
+    api.get<InstallmentGroup[]>('/installment-groups').then(r => r.data),
+
+  getOne: (id: string) =>
+    api.get<InstallmentGroup>(`/installment-groups/${id}`).then(r => r.data),
+
+  create: (dto: any) =>
+    api.post<InstallmentGroup>('/installment-groups', dto).then(r => r.data),
+
+  remove: (id: string) =>
+    api.delete(`/installment-groups/${id}`).then(r => r.data),
 };
